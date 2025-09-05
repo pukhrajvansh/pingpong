@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KeyBoat - 2D Ping Pong Game (2 Players)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Arial', sans-serif;
+        }
+        
+        .game-container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            max-width: 90vw;
+        }
+        
+        h1 {
+            color: white;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        canvas {
+            border: 3px solid white;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            max-width: 100%;
+            height: auto;
+        }
+        
+        .controls {
+            color: white;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        
+        .score {
+            color: white;
+            font-size: 18px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+
+        .touch-controls {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 800px;
+            margin-top: 15px;
+            gap: 20px;
+        }
+
+        .player-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .control-button {
+            width: 80px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid white;
+            border-radius: 10px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            backdrop-filter: blur(4px);
+        }
+
+        .control-button:active {
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(0.95);
+        }
+
+        .control-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .player-label {
+            color: white;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        @media (max-width: 600px) {
+            canvas {
+                width: 100%;
+                max-width: 350px;
+            }
+            
+            .control-button {
+                width: 60px;
+                height: 50px;
+                font-size: 14px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🚤 KeyBoat 🏓</h1>
+        <div class="score" id="score">Player 1: 0 | Player 2: 0</div>
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        
+        <div class="touch-controls">
+            <div class="player-controls">
+                <div class="player-label">Player 1</div>
+                <button class="control-button" id="p1-up">↑</button>
+                <button class="control-button" id="p1-down">↓</button>
+            </div>
+            
+            <div class="player-controls">
+                <div class="player-label">Player 2</div>
+                <button class="control-button" id="p2-up">↑</button>
+                <button class="control-button" id="p2-down">↓</button>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <p><strong>Controls:</strong></p>
+            <p>Desktop: Player 1 (W/S keys) | Player 2 (↑/↓ keys)</p>
+            <p>Mobile: Use the touch buttons above</p>
+            <p>Press SPACE to start/restart the game</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+
+        // Game state
+        let gameRunning = false;
+        let player1Score = 0;
+        let player2Score = 0;
+
+        // Game objects
+        const player1Paddle = {
+            width: 10,
+            height: 80,
+            x: 10,
+            y: canvas.height / 2 - 40,
+            speed: 6
+        };
+
+        const player2Paddle = {
+            width: 10,
+            height: 80,
+            x: canvas.width - 20,
+            y: canvas.height / 2 - 40,
+            speed: 6
+        };
+
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 8,
+            speedX: 5,
+            speedY: 3,
+            maxSpeed: 12
+        };
+
+        // Input handling - FIXED
+        const keys = {};
+        const touchControls = {
+            p1Up: false,
+            p1Down: false,
+            p2Up: false,
+            p2Down: false
+        };
+
+        // Keyboard controls - FIXED
+        document.addEventListener('keydown', (e) => {
+            keys[e.code] = true;  // Changed from e.key to e.code for more reliable arrow key detection
+            keys[e.key] = true;   // Keep both for compatibility
+            
+            if (e.key === ' ' || e.code === 'Space') {
+                e.preventDefault();
+                if (!gameRunning) {
+                    startGame();
+                }
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            keys[e.code] = false;  // Changed from e.key to e.code
+            keys[e.key] = false;   // Keep both for compatibility
+        });
+
+        // Touch controls setup
+        function setupTouchControls() {
+            const buttonMappings = {
+                'p1-up': 'p1Up',
+                'p1-down': 'p1Down',
+                'p2-up': 'p2Up',
+                'p2-down': 'p2Down'
+            };
+
+            Object.keys(buttonMappings).forEach(buttonId => {
+                const button = document.getElementById(buttonId);
+                const controlKey = buttonMappings[buttonId];
+                
+                // Touch events
+                button.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    touchControls[controlKey] = true;
+                });
+                
+                button.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    touchControls[controlKey] = false;
+                });
+
+                // Mouse events (for desktop testing)
+                button.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    touchControls[controlKey] = true;
+                });
+                
+                button.addEventListener('mouseup', (e) => {
+                    e.preventDefault();
+                    touchControls[controlKey] = false;
+                });
+
+                button.addEventListener('mouseleave', (e) => {
+                    touchControls[controlKey] = false;
+                });
+            });
+
+            // Start game on canvas tap
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (!gameRunning) {
+                    startGame();
+                }
+            });
+        }
+
+        function startGame() {
+            gameRunning = true;
+            resetBall();
+        }
+
+        function resetBall() {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            ball.speedX = (Math.random() > 0.5 ? 1 : -1) * 5;
+            ball.speedY = (Math.random() - 0.5) * 6;
+        }
+
+        function updatePaddles() {
+            // Player 1 controls - FIXED (W/S keys or touch buttons)
+            if ((keys['KeyW'] || keys['w'] || keys['W'] || touchControls.p1Up) && player1Paddle.y > 0) {
+                player1Paddle.y -= player1Paddle.speed;
+            }
+            if ((keys['KeyS'] || keys['s'] || keys['S'] || touchControls.p1Down) && player1Paddle.y < canvas.height - player1Paddle.height) {
+                player1Paddle.y += player1Paddle.speed;
+            }
+
+            // Player 2 controls - FIXED (Arrow keys or touch buttons)
+            if ((keys['ArrowUp'] || keys['Up'] || touchControls.p2Up) && player2Paddle.y > 0) {
+                player2Paddle.y -= player2Paddle.speed;
+            }
+            if ((keys['ArrowDown'] || keys['Down'] || touchControls.p2Down) && player2Paddle.y < canvas.height - player2Paddle.height) {
+                player2Paddle.y += player2Paddle.speed;
+            }
+        }
+
+        function updateBall() {
+            if (!gameRunning) return;
+
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+
+            // Ball collision with top and bottom walls
+            if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvas.height) {
+                ball.speedY = -ball.speedY;
+            }
+
+            // Ball collision with player 1 paddle
+            if (ball.x - ball.radius < player1Paddle.x + player1Paddle.width &&
+                ball.y > player1Paddle.y &&
+                ball.y < player1Paddle.y + player1Paddle.height &&
+                ball.speedX < 0) {
+                
+                ball.speedX = -ball.speedX;
+                const hitPos = (ball.y - player1Paddle.y) / player1Paddle.height;
+                ball.speedY = (hitPos - 0.5) * 8;
+                ball.speedX = Math.min(ball.speedX * 1.05, ball.maxSpeed);
+            }
+
+            // Ball collision with player 2 paddle
+            if (ball.x + ball.radius > player2Paddle.x &&
+                ball.y > player2Paddle.y &&
+                ball.y < player2Paddle.y + player2Paddle.height &&
+                ball.speedX > 0) {
+                
+                ball.speedX = -ball.speedX;
+                const hitPos = (ball.y - player2Paddle.y) / player2Paddle.height;
+                ball.speedY = (hitPos - 0.5) * 8;
+                ball.speedX = Math.max(ball.speedX * 1.05, -ball.maxSpeed);
+            }
+
+            // Scoring
+            if (ball.x < 0) {
+                player2Score++;
+                updateScore();
+                resetBall();
+            } else if (ball.x > canvas.width) {
+                player1Score++;
+                updateScore();
+                resetBall();
+            }
+        }
+
+        function updateScore() {
+            scoreElement.textContent = `Player 1: ${player1Score} | Player 2: ${player2Score}`;
+        }
+
+        function draw() {
+            // Clear canvas with gradient background
+            const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+            gradient.addColorStop(0, '#1e3c72');
+            gradient.addColorStop(1, '#2a5298');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw center line
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draw paddles
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(player1Paddle.x, player1Paddle.y, player1Paddle.width, player1Paddle.height);
+            ctx.fillRect(player2Paddle.x, player2Paddle.y, player2Paddle.width, player2Paddle.height);
+
+            // Draw ball with glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Draw start message
+            if (!gameRunning) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.font = '24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Press SPACE or tap canvas to start!', canvas.width / 2, canvas.height / 2 - 50);
+            }
+        }
+
+        function gameLoop() {
+            updatePaddles();
+            updateBall();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize game
+        setupTouchControls();
+        updateScore();
+        gameLoop();
+    </script>
+</body>
+</html>
